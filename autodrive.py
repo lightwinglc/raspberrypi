@@ -147,6 +147,7 @@ class Sg90(object):
         GPIO.setup(control, GPIO.OUT, initial=False)
         self.p = GPIO.PWM(control, 50)  # 50HZ
         self.p.start(6.9)
+        time.sleep(0.02)
         self.direction = "forward"
 
     def turnleft(self):
