@@ -10,7 +10,7 @@ import atexit
 class PiWheel(object):
     # 控制并联的一组轮子使用3个GPIO端口：IN1,IN2,EN
     # 设置车轮速度，ispwm设为1表示开启调速，为0表示全速运行，调速使用的参数频率（frequency）和占空比（dutycycle）
-    def __init__(self, in1, in2, en, ispwm = 1, frequency = 25, dutycycle = 50):
+    def __init__(self, in1, in2, en, ispwm = 1, frequency = 50, dutycycle = 60):
         self.in1 = in1
         self.in2 = in2
         self.en = en
@@ -71,7 +71,7 @@ class PiWheel(object):
 
 # 开车控制类
 class PiDrive(object):
-    def __init__(self, in1, in2, en1, in3, in4, en2, ispwm = 1, frequency = 25, dutycycle = 50):
+    def __init__(self, in1, in2, en1, in3, in4, en2, ispwm = 1, frequency = 50, dutycycle = 60):
         # 定义左右两组车轮
         self.leftwheel = PiWheel(in1, in2, en1, ispwm, frequency, dutycycle)
         self.rightwheel = PiWheel(in3, in4, en2, ispwm, frequency, dutycycle)
@@ -96,27 +96,45 @@ class PiDrive(object):
         self.leftwheel.stop()
         self.rightwheel.stop()
 
-    # 原地左转
+    # 原地左转90
     def turnleft(self):
         self.leftwheel.backward()
         self.rightwheel.forward()
+        time.sleep(0.75)
+        self.stop()
 
-    # 原地右转
+    # 原地左转45
+    def turnleft45(self):
+        self.leftwheel.backward()
+        self.rightwheel.forward()
+        time.sleep(0.4)
+        self.stop()
+
+    # 原地右转90
     def turnright(self):
         self.leftwheel.forward()
         self.rightwheel.backward()
+        time.sleep(0.75)
+        self.stop()
+
+    # 原地右转40
+    def turnright45(self):
+        self.leftwheel.forward()
+        self.rightwheel.backward()
+        time.sleep(0.4)
+        self.stop()
 
     # 掉头
     def turnback(self):
         self.turnleft()
-        time.sleep(2)
+        time.sleep(1.4)
         self.stop()
 
 
 class Hcsr04(object):
     def __init__(self, trig, echo):
         self.trig = trig
-        self.echo = trig
+        self.echo = echo
         GPIO.setup(trig, GPIO.OUT, initial=GPIO.LOW)
         GPIO.setup(echo, GPIO.IN)
 
@@ -124,15 +142,15 @@ class Hcsr04(object):
     def getdistance(self):
         # 发出触发信号
         GPIO.output(self.trig, GPIO.HIGH)
-        # 保持10us以上（我选择12us）
-        time.sleep(0.000012)
+        # 保持10us以上（我选择15us）
+        time.sleep(0.000015)
         GPIO.output(self.trig, GPIO.LOW)
-        resultrise = GPIO.wait_for_edge(self.echo, GPIO.RISING, timeout=200)
+        resultrise = GPIO.wait_for_edge(self.echo, GPIO.RISING, timeout=300)
         if resultrise is None:
             return -1
         # 发现高电平时开时计时
         t1 = time.time()
-        resultfall = GPIO.wait_for_edge(self.echo, GPIO.FALLING, timeout=200)
+        resultfall = GPIO.wait_for_edge(self.echo, GPIO.FALLING, timeout=300)
         if resultfall is None:
             return -2
         # 高电平结束停止计时
@@ -147,36 +165,37 @@ class Sg90(object):
         GPIO.setup(control, GPIO.OUT, initial=False)
         self.p = GPIO.PWM(control, 50)  # 50HZ
         self.p.start(6.9)
-        time.sleep(0.02)
+        time.sleep(0.4)
         self.direction = "forward"
 
     def turnleft(self):
-        self.p.ChangeDutyCycle(2.5)
-        time.sleep(0.02)
+        self.p.ChangeDutyCycle(12.1)
+        time.sleep(0.4)
         self.direction = "left"
 
     def turnleft45(self):
-        self.p.ChangeDutyCycle(4.7)
-        time.sleep(0.02)
+        self.p.ChangeDutyCycle(9.5)
+        time.sleep(0.4)
         self.direction = "left45"
 
     def forward(self):
         self.p.ChangeDutyCycle(6.9)
-        time.sleep(0.02)
+        time.sleep(0.4)
         self.direction = "forward"
 
     def turnright(self):
-        self.p.ChangeDutyCycle(12.1)
-        time.sleep(0.02)
+        self.p.ChangeDutyCycle(2.5)
+        time.sleep(0.4)
         self.direction = "right"
 
     def turnright45(self):
-        self.p.ChangeDutyCycle(9.5)
-        time.sleep(0.02)
+        self.p.ChangeDutyCycle(4.7)
+        time.sleep(0.4)
         self.direction = "right45"
 
 
 def main():
+    print "autodrive"
     # 退出自动清理GPIO通道
     atexit.register(GPIO.cleanup)
     # 关闭告警
@@ -186,60 +205,82 @@ def main():
 
     # 初始化小车动力模块，超声模块和舵机模块
     driver = PiDrive(13, 15, 11, 38, 36, 40)
-    hcsr04 = Hcsr04(19.26)
-    sg90 = Sg90(4)
+    hcsr04 = Hcsr04(35, 37)
+    sg90 = Sg90(7)
+
+    errorcount = 1
 
     try:
         while True:
             # 超声探测距离
             distance = hcsr04.getdistance()
-            if distance < 0:
-                # 测量异常，继续测量
+            # print "distance %d" % distance
+            if distance < 0 or distance > 450:
+                # 测量异常，停车，继续测量
+                driver.stop()
+                print "distance %d error" % distance
+                errorcount = errorcount + 1
+                if errorcount > 3:
+                    driver.backward()
+                    time.sleep(0.1)
+                    driver.turnback()
+                    errorcount = 0
                 continue
-            elif distance < 10:
+            elif distance <= 20:
+                errorcount = 0
                 # 距离不足，先停车
                 driver.stop()
+
+                print "distance %d" % distance
                 # sg90转向探测
                 if sg90.direction == "forward":
+                    print "sg90 turnleft45"
                     sg90.turnleft45()
                 elif sg90.direction == "left45":
                     sg90.turnleft()
+                    print "sg90 turnleft"
                 elif sg90.direction == "left":
                     sg90.turnright45()
+                    print "sg90 turnright45"
                 elif sg90.direction == "right45":
                     sg90.turnright()
+                    print "sg90 turnright"
                 # 向右并且距离不足，小车掉头，sg90归位
                 else:
                     sg90.forward()
                     driver.turnback()
+                    print "sg90 forward and dirve back"
             else:
+                errorcount = 0
                 # 距离足够，检查sg90的转向
                 if sg90.direction == "forward":
+                    #print "drive forward"
                     driver.forward()
                 elif sg90.direction == "left45":
+                    print "distance %d" % distance
                     # sg90回正，小车左转45度，停
+                    print "drive left45"
                     sg90.forward()
-                    driver.turnleft()
-                    time.sleep(0.5)
-                    driver.stop()
+                    driver.turnleft45()
                 elif sg90.direction == "left":
+                    print "distance %d" % distance
+                    print "drive left"
                     sg90.forward()
                     driver.turnleft()
-                    time.sleep(1)
-                    driver.stop()
                 elif sg90.direction == "right45":
+                    print "distance %d" % distance
+                    print "drive right45"
                     sg90.forward()
-                    driver.turnright()
-                    time.sleep(0.5)
-                    driver.stop()
+                    driver.turnright45()
                 else:
+                    print "distance %d" % distance
+                    print "drive right"
                     sg90.forward()
                     driver.turnright()
-                    time.sleep(1)
-                    driver.stop()
     except KeyboardInterrupt:
         exit()
 
 
 if __name__ == '__main__':
     main()
+
