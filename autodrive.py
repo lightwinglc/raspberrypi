@@ -147,26 +147,32 @@ class Sg90(object):
         GPIO.setup(control, GPIO.OUT, initial=False)
         self.p = GPIO.PWM(control, 50)  # 50HZ
         self.p.start(6.9)
+        self.direction = "forward"
 
     def turnleft(self):
         self.p.ChangeDutyCycle(2.5)
         time.sleep(0.02)
+        self.direction = "left"
 
     def turnleft45(self):
         self.p.ChangeDutyCycle(4.7)
         time.sleep(0.02)
+        self.direction = "left45"
 
     def forward(self):
         self.p.ChangeDutyCycle(6.9)
         time.sleep(0.02)
+        self.direction = "forward"
 
     def turnright(self):
         self.p.ChangeDutyCycle(12.1)
         time.sleep(0.02)
+        self.direction = "right"
 
     def turnright45(self):
         self.p.ChangeDutyCycle(9.5)
         time.sleep(0.02)
+        self.direction = "right45"
 
 
 def main():
@@ -182,8 +188,6 @@ def main():
     hcsr04 = Hcsr04(19.26)
     sg90 = Sg90(4)
 
-    sg90direction = "forward"
-
     try:
         while True:
             # 超声探测距离
@@ -195,27 +199,43 @@ def main():
                 # 距离不足，先停车
                 driver.stop()
                 # sg90转向探测
-                if sg90direction == "forward":
+                if sg90.direction == "forward":
                     sg90.turnleft45()
-                    sg90direction = "left45"
-                elif sg90direction == "left45":
+                elif sg90.direction == "left45":
                     sg90.turnleft()
-                    sg90direction = "left"
-                elif sg90direction == "left":
+                elif sg90.direction == "left":
                     sg90.turnright45()
-                    sg90direction = "right45"
-                elif sg90direction == "right45":
+                elif sg90.direction == "right45":
                     sg90.turnright()
-                    sg90direction = "right"
                 # 向右并且距离不足，小车掉头，sg90归位
                 else:
                     sg90.forward()
-                    sg90direction = "forward"
                     driver.turnback()
             else:
                 # 距离足够，检查sg90的转向
-                if
-                driver.forward()
+                if sg90.direction == "forward":
+                    driver.forward()
+                elif sg90.direction == "left45":
+                    # sg90回正，小车左转45度，停
+                    sg90.forward()
+                    driver.turnleft()
+                    time.sleep(0.5)
+                    driver.stop()
+                elif sg90.direction == "left":
+                    sg90.forward()
+                    driver.turnleft()
+                    time.sleep(1)
+                    driver.stop()
+                elif sg90.direction == "right45":
+                    sg90.forward()
+                    driver.turnright()
+                    time.sleep(0.5)
+                    driver.stop()
+                else:
+                    sg90.forward()
+                    driver.turnright()
+                    time.sleep(1)
+                    driver.stop()
     except KeyboardInterrupt:
         exit()
 
