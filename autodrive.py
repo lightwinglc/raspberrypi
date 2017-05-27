@@ -85,11 +85,13 @@ class PiDrive(object):
     def forward(self):
         self.leftwheel.forward()
         self.rightwheel.forward()
+        print "drive forward"
 
     # 后退
     def backward(self):
         self.leftwheel.backward()
         self.rightwheel.backward()
+        print "drive backward"
 
     # 停止
     def stop(self):
@@ -102,6 +104,7 @@ class PiDrive(object):
         self.rightwheel.forward()
         time.sleep(0.75)
         self.stop()
+        print "drive left"
 
     # 原地左转45
     def turnleft45(self):
@@ -109,6 +112,7 @@ class PiDrive(object):
         self.rightwheel.forward()
         time.sleep(0.4)
         self.stop()
+        print "drive left45"
 
     # 原地右转90
     def turnright(self):
@@ -116,6 +120,7 @@ class PiDrive(object):
         self.rightwheel.backward()
         time.sleep(0.75)
         self.stop()
+        print "drive right"
 
     # 原地右转40
     def turnright45(self):
@@ -123,12 +128,15 @@ class PiDrive(object):
         self.rightwheel.backward()
         time.sleep(0.4)
         self.stop()
+        print "drive right45"
 
     # 掉头
     def turnback(self):
-        self.turnleft()
+        self.leftwheel.forward()
+        self.rightwheel.backward()
         time.sleep(1.4)
         self.stop()
+        print "drive turnback"
 
 
 class Hcsr04(object):
@@ -172,26 +180,31 @@ class Sg90(object):
         self.p.ChangeDutyCycle(12.1)
         time.sleep(0.4)
         self.direction = "left"
+        print "sg90 turnleft"
 
     def turnleft45(self):
         self.p.ChangeDutyCycle(9.5)
         time.sleep(0.4)
         self.direction = "left45"
+        print "sg90 turnleft45"
 
     def forward(self):
         self.p.ChangeDutyCycle(6.9)
         time.sleep(0.4)
         self.direction = "forward"
+        print "sg90 forward"
 
     def turnright(self):
         self.p.ChangeDutyCycle(2.5)
         time.sleep(0.4)
         self.direction = "right"
+        print "sg90 turnright"
 
     def turnright45(self):
         self.p.ChangeDutyCycle(4.7)
         time.sleep(0.4)
         self.direction = "right45"
+        print "sg90 turnright45"
 
 
 def main():
@@ -208,73 +221,62 @@ def main():
     hcsr04 = Hcsr04(35, 37)
     sg90 = Sg90(7)
 
-    errorcount = 1
-
     try:
         while True:
             # 超声探测距离
             distance = hcsr04.getdistance()
-            # print "distance %d" % distance
-            if distance < 0 or distance > 450:
-                # 测量异常，停车，继续测量
-                driver.stop()
+
+            # 测距异常，包括测距超时，大于450cm，等待一段时间重测
+            if distance < 0:
                 print "distance %d error" % distance
-                errorcount = errorcount + 1
-                if errorcount > 3:
-                    driver.backward()
-                    time.sleep(0.1)
-                    driver.turnback()
-                    errorcount = 0
-                continue
-            elif distance <= 20:
-                errorcount = 0
+                time.sleep(0.1)
+
+            elif distance < 2:
+                # 距离非常近时停车，后退
+                driver.stop()
+                driver.backward()
+                time.sleep(0.1)
+                print "distance 0"
+
+            elif distance <= 20 or distance > 450:
                 # 距离不足，先停车
                 driver.stop()
-
                 print "distance %d" % distance
+
                 # sg90转向探测
                 if sg90.direction == "forward":
-                    print "sg90 turnleft45"
                     sg90.turnleft45()
                 elif sg90.direction == "left45":
                     sg90.turnleft()
-                    print "sg90 turnleft"
                 elif sg90.direction == "left":
                     sg90.turnright45()
-                    print "sg90 turnright45"
                 elif sg90.direction == "right45":
                     sg90.turnright()
-                    print "sg90 turnright"
                 # 向右并且距离不足，小车掉头，sg90归位
                 else:
                     sg90.forward()
                     driver.turnback()
                     print "sg90 forward and dirve back"
+
             else:
-                errorcount = 0
                 # 距离足够，检查sg90的转向
                 if sg90.direction == "forward":
-                    #print "drive forward"
                     driver.forward()
                 elif sg90.direction == "left45":
                     print "distance %d" % distance
                     # sg90回正，小车左转45度，停
-                    print "drive left45"
                     sg90.forward()
                     driver.turnleft45()
                 elif sg90.direction == "left":
                     print "distance %d" % distance
-                    print "drive left"
                     sg90.forward()
                     driver.turnleft()
                 elif sg90.direction == "right45":
                     print "distance %d" % distance
-                    print "drive right45"
                     sg90.forward()
                     driver.turnright45()
                 else:
                     print "distance %d" % distance
-                    print "drive right"
                     sg90.forward()
                     driver.turnright()
     except KeyboardInterrupt:
